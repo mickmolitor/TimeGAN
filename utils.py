@@ -109,37 +109,49 @@ def random_generator (batch_size, z_dim, T_mb, max_seq_len):
     - batch_size: size of the random vector
     - z_dim: dimension of random vector
     - T_mb: time information for the random vector
-    - max_seq_len: maximum sequence length
+    - max_seq_len: maximum sequence length (global)
     
   Returns:
-    - Z_mb: generated random vector
+    - Z_mb: generated random vector (padded array)
   """
-  Z_mb = list()
-  for i in range(batch_size):
-    temp = np.zeros([max_seq_len, z_dim])
+  # Use the actual batch size
+  actual_batch_size = len(T_mb)
+  
+  Z_mb = np.zeros([actual_batch_size, max_seq_len, z_dim])
+  for i in range(actual_batch_size):
     temp_Z = np.random.uniform(0., 1, [T_mb[i], z_dim])
-    temp[:T_mb[i],:] = temp_Z
-    Z_mb.append(temp_Z)
+    Z_mb[i, :T_mb[i], :] = temp_Z
+  
   return Z_mb
 
 
-def batch_generator(data, time, batch_size):
+def batch_generator(data, time, batch_size, max_seq_len):
   """Mini-batch generator.
   
   Args:
     - data: time-series data
     - time: time information
     - batch_size: the number of samples in each batch
+    - max_seq_len: global maximum sequence length for padding
     
   Returns:
-    - X_mb: time-series data in each batch
+    - X_mb: time-series data in each batch (padded to global max length)
     - T_mb: time information in each batch
   """
   no = len(data)
   idx = np.random.permutation(no)
   train_idx = idx[:batch_size]     
             
-  X_mb = list(data[i] for i in train_idx)
-  T_mb = list(time[i] for i in train_idx)
+  X_mb_list = [data[i] for i in train_idx]
+  T_mb = [time[i] for i in train_idx]
+  
+  batch_size_actual = len(X_mb_list)
+  feature_dim = X_mb_list[0].shape[1]
+  
+  # Pad sequences to global max length
+  X_mb = np.zeros((batch_size_actual, max_seq_len, feature_dim))
+  for i, seq in enumerate(X_mb_list):
+    seq_len = len(seq)
+    X_mb[i, :seq_len, :] = seq
   
   return X_mb, T_mb

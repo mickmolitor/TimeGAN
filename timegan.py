@@ -37,8 +37,9 @@ def timegan (ori_data, parameters):
   # Initialization on the Graph
   tf.reset_default_graph()
 
-  # Basic Parameters
-  no, seq_len, dim = np.asarray(ori_data).shape
+  # Basic Parameters - extract from list of sequences
+  no = len(ori_data)
+  dim = ori_data[0].shape[1]  # number of features
     
   # Maximum sequence length and each sequence length
   ori_time, max_seq_len = extract_time(ori_data)
@@ -47,18 +48,23 @@ def timegan (ori_data, parameters):
     """Min-Max Normalizer.
     
     Args:
-      - data: raw data
+      - data: raw data (list of variable-length sequences)
       
     Returns:
       - norm_data: normalized data
       - min_val: minimum values (for renormalization)
       - max_val: maximum values (for renormalization)
     """    
-    min_val = np.min(np.min(data, axis = 0), axis = 0)
-    data = data - min_val
-      
-    max_val = np.max(np.max(data, axis = 0), axis = 0)
-    norm_data = data / (max_val + 1e-7)
+    # Concatenate all sequences to find global min/max
+    all_data = np.concatenate(data, axis=0)
+    min_val = np.min(all_data, axis=0)
+    max_val = np.max(all_data, axis=0)
+    
+    # Normalize each sequence individually
+    norm_data = []
+    for seq in data:
+      norm_seq = (seq - min_val) / (max_val - min_val + 1e-7)
+      norm_data.append(norm_seq)
       
     return norm_data, min_val, max_val
   
@@ -229,7 +235,7 @@ def timegan (ori_data, parameters):
     
   for itt in range(iterations):
     # Set mini-batch
-    X_mb, T_mb = batch_generator(ori_data, ori_time, batch_size)           
+    X_mb, T_mb = batch_generator(ori_data, ori_time, batch_size, max_seq_len)           
     # Train embedder        
     _, step_e_loss = sess.run([E0_solver, E_loss_T0], feed_dict={X: X_mb, T: T_mb})        
     # Checkpoint
@@ -243,7 +249,7 @@ def timegan (ori_data, parameters):
     
   for itt in range(iterations):
     # Set mini-batch
-    X_mb, T_mb = batch_generator(ori_data, ori_time, batch_size)    
+    X_mb, T_mb = batch_generator(ori_data, ori_time, batch_size, max_seq_len)    
     # Random vector generation   
     Z_mb = random_generator(batch_size, z_dim, T_mb, max_seq_len)
     # Train generator       
@@ -261,7 +267,7 @@ def timegan (ori_data, parameters):
     # Generator training (twice more than discriminator training)
     for kk in range(2):
       # Set mini-batch
-      X_mb, T_mb = batch_generator(ori_data, ori_time, batch_size)               
+      X_mb, T_mb = batch_generator(ori_data, ori_time, batch_size, max_seq_len)               
       # Random vector generation
       Z_mb = random_generator(batch_size, z_dim, T_mb, max_seq_len)
       # Train generator
@@ -271,7 +277,7 @@ def timegan (ori_data, parameters):
            
     # Discriminator training        
     # Set mini-batch
-    X_mb, T_mb = batch_generator(ori_data, ori_time, batch_size)           
+    X_mb, T_mb = batch_generator(ori_data, ori_time, batch_size, max_seq_len)           
     # Random vector generation
     Z_mb = random_generator(batch_size, z_dim, T_mb, max_seq_len)
     # Check discriminator loss before updating
@@ -301,7 +307,7 @@ def timegan (ori_data, parameters):
     generated_data.append(temp)
         
   # Renormalization
-  generated_data = generated_data * max_val
-  generated_data = generated_data + min_val
+  for i in range(len(generated_data)):
+    generated_data[i] = generated_data[i] * (max_val - min_val + 1e-7) + min_val
     
   return generated_data
